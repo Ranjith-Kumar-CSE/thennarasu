@@ -34,9 +34,16 @@ except ImportError as e:
     st.error(f"Dependency error: {str(e)}. Please ensure all dependencies are installed via requirements.txt.")
     st.stop()
 
-# File uploader
+# File uploader with size limit
 st.subheader("Upload Data")
 uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+
+if uploaded_file is not None:
+    if uploaded_file.size > MAX_FILE_SIZE:
+        logger.error("Uploaded file exceeds size limit")
+        st.error("Error: File size exceeds 100MB limit. Please upload a smaller file.")
+        st.stop()
 
 # Load and validate uploaded data
 @st.cache_data
@@ -46,14 +53,18 @@ def load_data(uploaded_file):
         st.warning("Please upload a CSV file to proceed.")
         return None
     try:
-        # Read CSV from uploaded file
-        df = pd.read_csv(uploaded_file)
+        # Read CSV from uploaded file with encoding handling
+        df = pd.read_csv(uploaded_file, encoding='utf-8')
         if df.empty:
             logger.error("Uploaded CSV is empty")
             st.error("Error: The uploaded CSV file is empty.")
             return None
         logger.info("Data loaded successfully")
         return df
+    except UnicodeDecodeError:
+        logger.error("Invalid CSV encoding")
+        st.error("Error: The CSV file has an unsupported encoding. Please ensure it is UTF-8 encoded.")
+        return None
     except pd.errors.EmptyDataError:
         logger.error("Uploaded CSV is empty or invalid")
         st.error("Error: The uploaded CSV file is empty or invalid.")
@@ -68,6 +79,11 @@ df = load_data(uploaded_file)
 
 # Proceed only if data is loaded
 if df is not None:
+    # Display data preview
+    st.subheader("Data Preview")
+    st.write("First 5 rows of the uploaded data:")
+    st.dataframe(df.head())
+
     # Preprocessing
     def preprocess_data(df):
         # Check for required column
@@ -156,8 +172,7 @@ if df is not None:
     st.sidebar.header("Model Selection")
     model_name = st.sidebar.selectbox("Choose a model", list(models.keys()))
 
-    # Cache model training
-    @st.cache_resource
+    # Train model (no caching due to unhashable model objects)
     def train_model(model, X_train, y_train, model_name):
         try:
             model.fit(X_train, y_train)
